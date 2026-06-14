@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RISC-V Assembler & Disassembler</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #ffffff; --bg2: #f5f5f4; --bg3: #eeede9;
+    --text: #1a1a1a; --text2: #6b7280; --text3: #9ca3af;
+    --border: rgba(0,0,0,0.12); --border2: rgba(0,0,0,0.2);
+    --info-bg: #E6F1FB; --info-text: #0C447C;
+    --danger-bg: #FCEBEB; --danger-text: #A32D2D;
+    --radius: 8px; --radius-lg: 12px;
+    --mono: 'Courier New', Courier, monospace;
+    --sans: system-ui, -apple-system, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1c1b; --bg2: #252524; --bg3: #2e2e2c;
+      --text: #f0ede8; --text2: #9ca3af; --text3: #6b7280;
+      --border: rgba(255,255,255,0.1); --border2: rgba(255,255,255,0.2);
+      --info-bg: #0C447C; --info-text: #B5D4F4;
+      --danger-bg: #791F1F; --danger-text: #F7C1C1;
+    }
+  }
+  body { font-family: var(--sans); background: var(--bg3); color: var(--text); min-height: 100vh; padding: 2rem 1rem; }
+  .container { max-width: 780px; margin: 0 auto; }
+  header { margin-bottom: 2rem; }
+  header h1 { font-size: 22px; font-weight: 500; margin-bottom: 4px; }
+  header p { font-size: 14px; color: var(--text2); }
+  .tabs { display: flex; gap: 8px; margin-bottom: 1.5rem; flex-wrap: wrap; }
+  .tab { padding: 7px 18px; border-radius: var(--radius); border: 0.5px solid var(--border2); background: transparent; cursor: pointer; font-size: 14px; font-family: var(--sans); color: var(--text2); transition: all 0.15s; }
+  .tab.active { background: var(--info-bg); color: var(--info-text); border-color: transparent; font-weight: 500; }
+  .tab:hover:not(.active) { background: var(--bg2); }
+  .card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; margin-bottom: 1rem; }
+  label { font-size: 12px; color: var(--text2); display: block; margin-bottom: 6px; letter-spacing: 0.04em; text-transform: uppercase; }
+  textarea { width: 100%; font-family: var(--mono); font-size: 13px; border: 0.5px solid var(--border2); border-radius: var(--radius); padding: 10px 12px; resize: vertical; min-height: 130px; background: var(--bg2); color: var(--text); outline: none; }
+  textarea:focus { border-color: var(--info-text); }
+  .btn { padding: 8px 20px; border-radius: var(--radius); border: 0.5px solid var(--border2); background: transparent; cursor: pointer; font-size: 14px; font-family: var(--sans); color: var(--text); margin-right: 8px; margin-top: 8px; transition: all 0.15s; }
+  .btn:hover { background: var(--bg2); }
+  .btn.primary { background: var(--info-bg); color: var(--info-text); border-color: transparent; font-weight: 500; }
+  .btn.primary:hover { opacity: 0.85; }
+  .result-box { background: var(--bg2); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 10px 12px; font-family: var(--mono); font-size: 13px; line-height: 1.8; }
+  .line { display: flex; gap: 12px; align-items: flex-start; border-bottom: 0.5px solid var(--border); padding: 4px 0; }
+  .line:last-child { border-bottom: none; }
+  .lbl { font-size: 11px; color: var(--text3); min-width: 60px; font-family: var(--sans); padding-top: 2px; }
+  .val { flex: 1; word-break: break-all; }
+  .val.hex { color: #1D9E75; }
+  .val.bin { color: #378ADD; font-size: 12px; }
+  .val.asm { color: #7F77DD; }
+  .error { color: var(--danger-text); background: var(--danger-bg); border-radius: var(--radius); padding: 8px 12px; font-size: 13px; font-family: var(--sans); }
+  .fmt-badge { font-size: 11px; font-family: var(--sans); padding: 2px 8px; border-radius: 999px; font-weight: 500; display: inline-block; }
+  .fmt-R { background: #EEEDFE; color: #3C3489; }
+  .fmt-I { background: #E6F1FB; color: #0C447C; }
+  .fmt-S { background: #E1F5EE; color: #085041; }
+  .fmt-B { background: #FAEEDA; color: #633806; }
+  .fmt-U { background: #FAECE7; color: #712B13; }
+  .fmt-J { background: #FBEAF0; color: #72243E; }
+  @media (prefers-color-scheme: dark) {
+    .fmt-R { background: #3C3489; color: #CECBF6; }
+    .fmt-I { background: #0C447C; color: #B5D4F4; }
+    .fmt-S { background: #085041; color: #9FE1CB; }
+    .fmt-B { background: #633806; color: #FAC775; }
+    .fmt-U { background: #712B13; color: #F5C4B3; }
+    .fmt-J { background: #72243E; color: #F4C0D1; }
+  }
+  .bits-display { display: flex; gap: 2px; flex-wrap: wrap; margin-top: 10px; }
+  .bit-group { display: flex; flex-direction: column; align-items: center; }
+  .bit-label { font-size: 10px; color: var(--text3); font-family: var(--sans); margin-bottom: 2px; }
+  .bits { display: flex; gap: 1px; }
+  .bit { width: 17px; height: 23px; display: flex; align-items: center; justify-content: center; font-size: 11px; border-radius: 3px; font-family: var(--mono); }
+  .b0 { background: var(--bg2); color: var(--text2); }
+  .b1 { background: #E6F1FB; color: #0C447C; }
+  @media (prefers-color-scheme: dark) { .b1 { background: #0C447C; color: #B5D4F4; } }
+  .section-title { font-size: 13px; font-weight: 500; color: var(--text2); margin-bottom: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { padding: 5px 8px; border-bottom: 0.5px solid var(--border); text-align: left; font-family: var(--mono); }
+  th { background: var(--bg2); font-family: var(--sans); font-size: 11px; color: var(--text2); font-weight: 500; }
+  .radio-group { display: flex; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; }
+  .radio-group label { text-transform: none; letter-spacing: 0; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px; margin: 0; }
+  .src-text { font-size: 13px; font-family: var(--mono); color: var(--text2); }
+  .result-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>RISC-V Assembler &amp; Disassembler</h1>
+    <p>Converts between assembly, binary, and hex — supports R, I, S, B, U, J formats</p>
+  </header>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('asm')">Assembly → Machine Code</button>
+    <button class="tab" onclick="switchTab('dis')">Machine Code → Assembly</button>
+    <button class="tab" onclick="switchTab('ref')">ISA Reference</button>
+  </div>
+
+  <!-- ASM TAB -->
+  <div id="tab-asm">
+    <div class="card">
+      <label>Assembly instructions (one per line)</label>
+      <textarea id="asm-input" placeholder="add x1, x2, x3&#10;addi x5, x0, 10&#10;sw x2, 8(x1)&#10;beq x1, x2, 16&#10;lui x3, 0x12345&#10;jal x1, 100"></textarea>
+      <div style="margin-top:10px;">
+        <button class="btn primary" onclick="assemble()">Assemble</button>
+        <button class="btn" onclick="clearAll('asm')">Clear</button>
+        <button class="btn" onclick="loadExample()">Load example</button>
+      </div>
+    </div>
+    <div id="asm-result"></div>
+  </div>
+
+  <!-- DIS TAB -->
+  <div id="tab-dis" style="display:none">
+    <div class="card">
+      <label>Input format</label>
+      <div class="radio-group">
+        <label><input type="radio" name="disFmt" value="hex" checked> Hex (e.g. 0x00310133)</label>
+        <label><input type="radio" name="disFmt" value="bin"> Binary (32 bits)</label>
+      </div>
+      <label>Machine code (one 32-bit word per line)</label>
+      <textarea id="dis-input" placeholder="0x00310133&#10;0x00A00293&#10;0x0020A423&#10;0x00208663&#10;0x123452B7&#10;0x064000EF"></textarea>
+      <div style="margin-top:10px;">
+        <button class="btn primary" onclick="disassemble()">Disassemble</button>
+        <button class="btn" onclick="clearAll('dis')">Clear</button>
+      </div>
+    </div>
+    <div id="dis-result"></div>
+  </div>
+
+  <!-- REF TAB -->
+  <div id="tab-ref" style="display:none">
+    <div class="card">
+      <div class="section-title">Format layouts</div>
+      <div style="overflow-x:auto;">
+        <table>
+          <tr>
+            <th>Type</th><th>31–25</th><th>24–20</th><th>19–15</th><th>14–12</th><th>11–7</th><th>6–0</th>
+          </tr>
+          <tr><td><span class="fmt-badge fmt-R">R</span></td><td>funct7</td><td>rs2</td><td>rs1</td><td>funct3</td><td>rd</td><td>opcode</td></tr>
+          <tr><td><span class="fmt-badge fmt-I">I</span></td><td colspan="2">imm[11:0]</td><td>rs1</td><td>funct3</td><td>rd</td><td>opcode</td></tr>
+          <tr><td><span class="fmt-badge fmt-S">S</span></td><td>imm[11:5]</td><td>rs2</td><td>rs1</td><td>funct3</td><td>imm[4:0]</td><td>opcode</td></tr>
+          <tr><td><span class="fmt-badge fmt-B">B</span></td><td>imm[12|10:5]</td><td>rs2</td><td>rs1</td><td>funct3</td><td>imm[4:1|11]</td><td>opcode</td></tr>
+          <tr><td><span class="fmt-badge fmt-U">U</span></td><td colspan="4">imm[31:12]</td><td>rd</td><td>opcode</td></tr>
+          <tr><td><span class="fmt-badge fmt-J">J</span></td><td colspan="4">imm[20|10:1|11|19:12]</td><td>rd</td><td>opcode</td></tr>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="section-title">Instruction table</div>
+      <div style="overflow-x:auto;">
+        <table id="isa-table"></table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const ISA = {
+  R: [
+    {mn:'add', funct3:'000', funct7:'0000000'},
+    {mn:'sub', funct3:'000', funct7:'0100000'},
+    {mn:'sll', funct3:'001', funct7:'0000000'},
+    {mn:'slt', funct3:'010', funct7:'0000000'},
+    {mn:'sltu',funct3:'011', funct7:'0000000'},
+    {mn:'xor', funct3:'100', funct7:'0000000'},
+    {mn:'srl', funct3:'101', funct7:'0000000'},
+    {mn:'sra', funct3:'101', funct7:'0100000'},
+    {mn:'or',  funct3:'110', funct7:'0000000'},
+    {mn:'and', funct3:'111', funct7:'0000000'},
+    {mn:'mul', funct3:'000', funct7:'0000001'},
+    {mn:'mulh',funct3:'001', funct7:'0000001'},
+    {mn:'div', funct3:'100', funct7:'0000001'},
+    {mn:'rem', funct3:'110', funct7:'0000001'},
+  ],
+  I_arith: [
+    {mn:'addi', opcode:'0010011', funct3:'000'},
+    {mn:'slti', opcode:'0010011', funct3:'010'},
+    {mn:'sltiu',opcode:'0010011', funct3:'011'},
+    {mn:'xori', opcode:'0010011', funct3:'100'},
+    {mn:'ori',  opcode:'0010011', funct3:'110'},
+    {mn:'andi', opcode:'0010011', funct3:'111'},
+    {mn:'slli', opcode:'0010011', funct3:'001', imm:'0000000'},
+    {mn:'srli', opcode:'0010011', funct3:'101', imm:'0000000'},
+    {mn:'srai', opcode:'0010011', funct3:'101', imm:'0100000'},
+  ],
+  I_load: [
+    {mn:'lb',  opcode:'0000011', funct3:'000'},
+    {mn:'lh',  opcode:'0000011', funct3:'001'},
+    {mn:'lw',  opcode:'0000011', funct3:'010'},
+    {mn:'lbu', opcode:'0000011', funct3:'100'},
+    {mn:'lhu', opcode:'0000011', funct3:'101'},
+  ],
+  S: [
+    {mn:'sb', funct3:'000'},
+    {mn:'sh', funct3:'001'},
+    {mn:'sw', funct3:'010'},
+  ],
+  B: [
+    {mn:'beq',  funct3:'000'},
+    {mn:'bne',  funct3:'001'},
+    {mn:'blt',  funct3:'100'},
+    {mn:'bge',  funct3:'101'},
+    {mn:'bltu', funct3:'110'},
+    {mn:'bgeu', funct3:'111'},
+  ],
+  U: [
+    {mn:'lui',   opcode:'0110111'},
+    {mn:'auipc', opcode:'0010111'},
+  ],
+  J: [{mn:'jal', opcode:'1101111'}]
+};
+
+const OPCODES = { R:'0110011', S:'0100011', B:'1100011' };
+
+function regNum(s) {
+  s = s.trim().toLowerCase();
+  if (/^x\d+$/.test(s)) return parseInt(s.slice(1));
+  const abi = {zero:0,ra:1,sp:2,gp:3,tp:4,t0:5,t1:6,t2:7,s0:8,fp:8,s1:9,
+    a0:10,a1:11,a2:12,a3:13,a4:14,a5:15,a6:16,a7:17,
+    s2:18,s3:19,s4:20,s5:21,s6:22,s7:23,s8:24,s9:25,s10:26,s11:27,
+    t3:28,t4:29,t5:30,t6:31};
+  if (abi[s] !== undefined) return abi[s];
+  throw new Error('Unknown register: ' + s);
+}
+
+function toBin(n, bits) {
+  if (n < 0) n = (1 << bits) + n;
+  return (n >>> 0).toString(2).padStart(bits,'0').slice(-bits);
+}
+
+function signExt(val, bits) {
+  const sign = 1 << (bits - 1);
+  return (val & (sign - 1)) - (val & sign);
+}
+
+function parseImm(s) {
+  s = s.trim();
+  if (/^0x/i.test(s)) return parseInt(s, 16);
+  if (/^0b/i.test(s)) return parseInt(s, 2);
+  return parseInt(s, 10);
+}
+
+function assembleOne(line) {
+  line = line.trim().replace(/,/g,' ').replace(/\s+/g,' ');
+  if (!line || line.startsWith('#')) return null;
+  const parts = line.split(' ').filter(Boolean);
+  const mn = parts[0].toLowerCase();
+
+  const ri = ISA.R.find(x => x.mn === mn);
+  if (ri) {
+    const rd=regNum(parts[1]),rs1=regNum(parts[2]),rs2=regNum(parts[3]);
+    return {fmt:'R', bits: ri.funct7+toBin(rs2,5)+toBin(rs1,5)+ri.funct3+toBin(rd,5)+OPCODES.R};
+  }
+  const ui = ISA.U.find(x => x.mn === mn);
+  if (ui) {
+    const rd=regNum(parts[1]);
+    let imm=parseImm(parts[2]);
+    if (imm > 0xFFFFF) imm = imm >> 12;
+    return {fmt:'U', bits: toBin(imm,20)+toBin(rd,5)+ui.opcode};
+  }
+  if (mn==='jal') {
+    const rd=regNum(parts[1]), offset=parseImm(parts[2]);
+    const b=toBin(offset,21);
+    return {fmt:'J', bits: b[0]+b.slice(10,20)+b[9]+b.slice(1,9)+toBin(rd,5)+'1101111'};
+  }
+  if (mn==='jalr') {
+    const rd=regNum(parts[1]);
+    let rs1,imm;
+    if (parts[2].includes('(')) {
+      const m=parts[2].match(/(-?\d+)\((.+)\)/); imm=parseInt(m[1]); rs1=regNum(m[2]);
+    } else { rs1=regNum(parts[2]); imm=parseImm(parts[3]); }
+    return {fmt:'I', bits: toBin(imm,12)+toBin(rs1,5)+'000'+toBin(rd,5)+'1100111'};
+  }
+  if (mn==='ecall') return {fmt:'I', bits:'000000000000'+'00000'+'000'+'00000'+'1110011'};
+  const si = ISA.S.find(x => x.mn === mn);
+  if (si) {
+    const rs2=regNum(parts[1]);
+    const m=parts[2].match(/(-?\d+)\((.+)\)/);
+    const imm=parseInt(m[1]),rs1=regNum(m[2]);
+    const ib=toBin(imm,12);
+    return {fmt:'S', bits: ib.slice(0,7)+toBin(rs2,5)+toBin(rs1,5)+si.funct3+ib.slice(7)+OPCODES.S};
+  }
+  const bi = ISA.B.find(x => x.mn === mn);
+  if (bi) {
+    const rs1=regNum(parts[1]),rs2=regNum(parts[2]),offset=parseImm(parts[3]);
+    const b=toBin(offset,13);
+    return {fmt:'B', bits: b[0]+b.slice(2,8)+toBin(rs2,5)+toBin(rs1,5)+bi.funct3+b.slice(8,12)+b[1]+OPCODES.B};
+  }
+  const li = ISA.I_load.find(x => x.mn === mn);
+  if (li) {
+    const rd=regNum(parts[1]);
+    const m=parts[2].match(/(-?\d+)\((.+)\)/);
+    const imm=parseInt(m[1]),rs1=regNum(m[2]);
+    return {fmt:'I', bits: toBin(imm,12)+toBin(rs1,5)+li.funct3+toBin(rd,5)+li.opcode};
+  }
+  const ii = ISA.I_arith.find(x => x.mn === mn);
+  if (ii) {
+    const rd=regNum(parts[1]),rs1=regNum(parts[2]),imm=parseImm(parts[3]);
+    let immBits = (mn==='slli'||mn==='srli'||mn==='srai') ? (ii.imm||'0000000')+toBin(imm&0x1F,5) : toBin(imm,12);
+    return {fmt:'I', bits: immBits+toBin(rs1,5)+ii.funct3+toBin(rd,5)+ii.opcode};
+  }
+  throw new Error('Unknown instruction: ' + mn);
+}
+
+function disassembleOne(word32) {
+  const b=word32.toString(2).padStart(32,'0');
+  const opcode=b.slice(25);
+  const rd=()=>parseInt(b.slice(20,25),2);
+  const rs1=()=>parseInt(b.slice(12,17),2);
+  const rs2=()=>parseInt(b.slice(7,12),2);
+  const f3=b.slice(17,20), f7=b.slice(0,7);
+  const rx=n=>'x'+n;
+
+  if (opcode==='0110011') {
+    const ins=ISA.R.find(x=>x.funct3===f3&&x.funct7===f7);
+    if (!ins) throw new Error('Unknown R-type');
+    return {fmt:'R', asm:`${ins.mn} ${rx(rd())}, ${rx(rs1())}, ${rx(rs2())}`};
+  }
+  if (opcode==='0110111'||opcode==='0010111') {
+    const ins=ISA.U.find(x=>x.opcode===opcode);
+    const imm=parseInt(b.slice(0,20),2);
+    return {fmt:'U', asm:`${ins.mn} ${rx(rd())}, 0x${imm.toString(16).toUpperCase()}`};
+  }
+  if (opcode==='1101111') {
+    const raw=b[0]+b.slice(12,20)+b[11]+b.slice(1,11)+'0';
+    const imm=signExt(parseInt(raw,2),21);
+    return {fmt:'J', asm:`jal ${rx(rd())}, ${imm}`};
+  }
+  if (opcode==='1100111') {
+    const imm=signExt(parseInt(b.slice(0,12),2),12);
+    return {fmt:'I', asm:`jalr ${rx(rd())}, ${imm}(${rx(rs1())})`};
+  }
+  if (opcode==='1110011') return {fmt:'I', asm:'ecall'};
+  if (opcode==='0000011') {
+    const ins=ISA.I_load.find(x=>x.funct3===f3);
+    if (!ins) throw new Error('Unknown load');
+    const imm=signExt(parseInt(b.slice(0,12),2),12);
+    return {fmt:'I', asm:`${ins.mn} ${rx(rd())}, ${imm}(${rx(rs1())})`};
+  }
+  if (opcode==='0010011') {
+    if (f3==='001'||f3==='101') {
+      const shamt=parseInt(b.slice(7,12),2);
+      const op=f3==='001'?'slli':(f7==='0100000'?'srai':'srli');
+      return {fmt:'I', asm:`${op} ${rx(rd())}, ${rx(rs1())}, ${shamt}`};
+    }
+    const ins=ISA.I_arith.find(x=>x.funct3===f3);
+    if (!ins) throw new Error('Unknown I-arith');
+    const imm=signExt(parseInt(b.slice(0,12),2),12);
+    return {fmt:'I', asm:`${ins.mn} ${rx(rd())}, ${rx(rs1())}, ${imm}`};
+  }
+  if (opcode==='0100011') {
+    const ins=ISA.S.find(x=>x.funct3===f3);
+    if (!ins) throw new Error('Unknown store');
+    const immBits=b.slice(0,7)+b.slice(20,25);
+    const imm=signExt(parseInt(immBits,2),12);
+    return {fmt:'S', asm:`${ins.mn} ${rx(rs2())}, ${imm}(${rx(rs1())})`};
+  }
+  if (opcode==='1100011') {
+    const ins=ISA.B.find(x=>x.funct3===f3);
+    if (!ins) throw new Error('Unknown branch');
+    const raw=b[0]+b[24]+b.slice(1,7)+b.slice(20,24)+'0';
+    const imm=signExt(parseInt(raw,2),13);
+    return {fmt:'B', asm:`${ins.mn} ${rx(rs1())}, ${rx(rs2())}, ${imm}`};
+  }
+  throw new Error('Unknown opcode: ' + opcode);
+}
+
+function renderBits(bits) {
+  const groups=[
+    {label:'[31:25]',bits:bits.slice(0,7)},
+    {label:'[24:20]',bits:bits.slice(7,12)},
+    {label:'[19:15]',bits:bits.slice(12,17)},
+    {label:'[14:12]',bits:bits.slice(17,20)},
+    {label:'[11:7]', bits:bits.slice(20,25)},
+    {label:'[6:0]',  bits:bits.slice(25)},
+  ];
+  return '<div class="bits-display">'+groups.map(g=>
+    `<div class="bit-group">
+      <div class="bit-label">${g.label}</div>
+      <div class="bits">${g.bits.split('').map(c=>`<div class="bit b${c}">${c}</div>`).join('')}</div>
+    </div>`
+  ).join('<div style="width:4px"></div>')+'</div>';
+}
+
+function assemble() {
+  const lines=document.getElementById('asm-input').value.split('\n');
+  const out=[];
+  for (const line of lines) {
+    const clean=line.trim();
+    if (!clean||clean.startsWith('#')) continue;
+    try {
+      const r=assembleOne(clean);
+      if (!r) continue;
+      const word=parseInt(r.bits,2);
+      const hex='0x'+word.toString(16).toUpperCase().padStart(8,'0');
+      out.push({src:clean,fmt:r.fmt,bits:r.bits,hex,word});
+    } catch(e) { out.push({src:clean,err:e.message}); }
+  }
+  const el=document.getElementById('asm-result');
+  if (!out.length){el.innerHTML='';return;}
+  el.innerHTML=out.map(r=>r.err
+    ?`<div class="card"><div class="error"><i class="ti ti-alert-circle"></i> ${r.src}: ${r.err}</div></div>`
+    :`<div class="card">
+        <div class="result-header">
+          <span class="fmt-badge fmt-${r.fmt}">${r.fmt}-type</span>
+          <span class="src-text">${r.src}</span>
+        </div>
+        <div class="result-box">
+          <div class="line"><span class="lbl">HEX</span><span class="val hex">${r.hex}</span></div>
+          <div class="line"><span class="lbl">DEC</span><span class="val">${r.word>>>0}</span></div>
+          <div class="line"><span class="lbl">BIN</span><span class="val bin">${r.bits}</span></div>
+        </div>
+        ${renderBits(r.bits)}
+      </div>`
+  ).join('');
+}
+
+function disassemble() {
+  const fmt=document.querySelector('input[name="disFmt"]:checked').value;
+  const lines=document.getElementById('dis-input').value.split('\n');
+  const out=[];
+  for (const line of lines) {
+    const clean=line.trim();
+    if (!clean) continue;
+    try {
+      let word;
+      if (fmt==='hex') { word=parseInt(clean.replace(/^0x/i,''),16); }
+      else {
+        const stripped=clean.replace(/\s/g,'');
+        if (stripped.length!==32) throw new Error('Binary must be exactly 32 bits');
+        word=parseInt(stripped,2);
+      }
+      const r=disassembleOne(word);
+      const bits=word.toString(2).padStart(32,'0');
+      const hex='0x'+word.toString(16).toUpperCase().padStart(8,'0');
+      out.push({src:clean,fmt:r.fmt,asm:r.asm,bits,hex,word});
+    } catch(e) { out.push({src:clean,err:e.message}); }
+  }
+  const el=document.getElementById('dis-result');
+  if (!out.length){el.innerHTML='';return;}
+  el.innerHTML=out.map(r=>r.err
+    ?`<div class="card"><div class="error"><i class="ti ti-alert-circle"></i> ${r.src}: ${r.err}</div></div>`
+    :`<div class="card">
+        <div class="result-header">
+          <span class="fmt-badge fmt-${r.fmt}">${r.fmt}-type</span>
+          <span class="src-text">${r.src}</span>
+        </div>
+        <div class="result-box">
+          <div class="line"><span class="lbl">ASM</span><span class="val asm">${r.asm}</span></div>
+          <div class="line"><span class="lbl">HEX</span><span class="val hex">${r.hex}</span></div>
+          <div class="line"><span class="lbl">BIN</span><span class="val bin">${r.bits}</span></div>
+        </div>
+        ${renderBits(r.bits)}
+      </div>`
+  ).join('');
+}
+
+function switchTab(t) {
+  document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('active',['asm','dis','ref'][i]===t));
+  document.getElementById('tab-asm').style.display=t==='asm'?'':'none';
+  document.getElementById('tab-dis').style.display=t==='dis'?'':'none';
+  document.getElementById('tab-ref').style.display=t==='ref'?'':'none';
+  if (t==='ref') buildRefTable();
+}
+
+function clearAll(tab) {
+  document.getElementById(tab+'-input').value='';
+  document.getElementById(tab+'-result').innerHTML='';
+}
+
+function loadExample() {
+  document.getElementById('asm-input').value=
+`add x1, x2, x3
+sub x4, x1, x5
+addi x5, x0, 10
+lw x6, 4(x1)
+sw x6, 8(x2)
+beq x1, x2, 16
+bne x3, x4, -8
+lui x3, 0x12345
+jal x1, 100
+jalr x0, 0(x1)
+sll x7, x2, x3
+srl x8, x4, x5
+sra x9, x6, x7
+and x10, x1, x2
+or x11, x3, x4
+xor x12, x5, x6`;
+  assemble();
+}
+
+function buildRefTable() {
+  const tbl=document.getElementById('isa-table');
+  if (tbl.innerHTML) return;
+  const rows=[
+    ['Instruction','Type','Opcode','funct3','funct7'],
+    ...ISA.R.map(x=>[x.mn,'R','0110011',x.funct3,x.funct7]),
+    ...ISA.I_arith.map(x=>[x.mn,'I',x.opcode,x.funct3,x.imm||'—']),
+    ...ISA.I_load.map(x=>[x.mn,'I',x.opcode,x.funct3,'—']),
+    ['jalr','I','1100111','000','—'],
+    ['ecall','I','1110011','000','—'],
+    ...ISA.S.map(x=>[x.mn,'S','0100011',x.funct3,'—']),
+    ...ISA.B.map(x=>[x.mn,'B','1100011',x.funct3,'—']),
+    ...ISA.U.map(x=>[x.mn,'U',x.opcode,'—','—']),
+    ['jal','J','1101111','—','—'],
+  ];
+  tbl.innerHTML=rows.map((r,i)=>{
+    const tag=i===0?'th':'td';
+    return `<tr>${r.map((c,j)=>{
+      let v=c;
+      if (i>0&&j===1) v=`<span class="fmt-badge fmt-${c}">${c}</span>`;
+      return `<${tag}>${v}</${tag}>`;
+    }).join('')}</tr>`;
+  }).join('');
+}
+</script>
+</body>
+</html>
