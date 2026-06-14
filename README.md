@@ -300,9 +300,8 @@ After 20 days of focused study, the most important things I learned:
 
 ## Author
 
-Jotham — Computer Science student with a focus on computer architecture and digital design.  
+Jotham — ECE VLSI student with a focus on computer architecture and digital design.  
 This project was completed as part of self-directed study in processor architecture and low-level systems.
 
 ---
 
-*If you found this useful, feel free to star the repository and share it with others learning RISC-V.*
